@@ -1,0 +1,28 @@
+.card {
+  border: 2px solid #10b981;
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 140px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.label {
+  font-size: 0.875rem;
+  color: #666;
+  font-weight: 400;
+}
+
+.value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #000;
+}
