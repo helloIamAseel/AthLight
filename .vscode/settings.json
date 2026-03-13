@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+        "./AI/NLP/src",
+        "./AI/recommendation/src"
+    ]
+}
