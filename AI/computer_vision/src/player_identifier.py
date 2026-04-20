@@ -1,6 +1,5 @@
 """
 Player Identification Module
-=============================
 Helps identify which tracked player is the video uploader.
 
 Process:
