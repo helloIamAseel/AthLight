@@ -1,20 +1,181 @@
 const { auth, db } = require('../config/firebase');
 const { ROLES, MAX_LOGIN_ATTEMPTS, LOCKOUT_TIME } = require('../config/constants');
-const { 
-  validateSignup, 
-  validateLogin, 
-  validatePasswordReset 
+const {
+  validateGeneralInfo,
+  validateAthleteInfo,
+  //validateSignup, 
+  validateLogin,
+  validatePasswordReset
 } = require('../utils/validators');
-const { 
-  isAccountLocked, 
+const {
+  isAccountLocked,
   getLockoutTimeRemaining,
   sanitizeUserData,
   successResponse,
   errorResponse
 } = require('../utils/helpers');
 
+const saveGeneralInfo = async (req, res) => {
+  try {
+    const { error, value } = validateGeneralInfo(req.body);
+
+    if (error) {
+      return errorResponse(res, 400, error.details.map(d => d.message).join(', '));
+    }
+
+    const draftRef = await db.collection("registrationDrafts").add({
+      ...value,
+      signupStep: "general_info",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    return successResponse(res, 201, "General info saved successfully", {
+      draftId: draftRef.id,
+      signupStep: "general_info"
+    });
+
+  } catch (error) {
+    console.error("Save general info error:", error);
+    return errorResponse(res, 500, "Failed to save general info");
+  }
+};
+
+const saveAthleteInfo = async (req, res) => {
+  try {
+    const { draftId } = req.body;
+
+    if (!draftId) {
+      return res.status(400).json({
+        error: "Draft ID is missing"
+      });
+    }
+
+    // 1. Get draft from Firestore
+    const draftRef = db.collection("registrationDrafts").doc(draftId);
+    const draftDoc = await draftRef.get();
+
+    if (!draftDoc.exists) {
+      return res.status(404).json({
+        error: "Draft not found"
+      });
+    }
+
+    const draftData = draftDoc.data();
+
+    // 2. Check role
+    if (draftData.role !== ROLES.ATHLETE) {
+      return res.status(403).json({
+        error: "Only athletes can submit this step"
+      });
+    }
+
+    // 3. Merge sport from draft with request body
+    const dataToValidate = {
+      ...req.body,
+      sport: draftData.sport
+    };
+
+    // 4. Validate
+    const { error, value } = validateAthleteInfo(dataToValidate);
+
+    if (error) {
+      return res.status(400).json({
+        error: error.details.map(d => d.message).join(", ")
+      });
+    }
+
+    // 5. Remove fields we don't want to save
+    const { draftId: validatedDraftId, sport, ...athleteData } = value;
+
+    // 6. Save to Firestore
+    await draftRef.update({
+      ...athleteData,
+      signupStep: "role_specific",
+      updatedAt: new Date().toISOString()
+    });
+
+    return res.status(200).json({
+      message: "Athlete info saved successfully",
+      draftId: validatedDraftId
+    });
+
+  } catch (err) {
+    console.error("Error saving athlete info:", err);
+    return res.status(500).json({
+      error: "Server error"
+    });
+  }
+};
+const bcrypt = require("bcrypt");
+
 /**
- * SIGNUP - Create new user account
+ * Complete signup from draft
+ */
+const completeSignup = async (req, res) => {
+  try {
+    const { draftId, password } = req.body;
+
+    // 1. Get draft
+    const draftRef = db.collection("registrationDrafts").doc(draftId);
+    const draftDoc = await draftRef.get();
+
+    if (!draftDoc.exists) {
+      return errorResponse(res, 404, "Draft not found");
+    }
+
+    const draftData = draftDoc.data();
+
+    // 2. Create user in Firebase Auth
+    const userRecord = await auth.createUser({
+      email: draftData.email,
+      password: password,
+      displayName: `${draftData.firstName} ${draftData.lastName}`
+    });
+
+    // 3. Hash password (optional)
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // 4. Create Firestore user
+    await db.collection("users").doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      email: draftData.email,
+      fullName: `${draftData.firstName} ${draftData.lastName}`,
+      role: draftData.role,
+
+      // fields from draft
+      firstName: draftData.firstName,
+      middleName: draftData.middleName,
+      lastName: draftData.lastName,
+      dateOfBirth: draftData.dateOfBirth,
+      gender: draftData.gender,
+      country: draftData.country,
+      city: draftData.city,
+      nationality: draftData.nationality,
+      phoneNumber: draftData.phoneNumber,
+      sport: draftData.sport,
+      clubName: draftData.clubName,
+
+      passwordHash,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // 5. Delete draft
+    await draftRef.delete();
+
+    return successResponse(res, 201, "Account created successfully", {
+      userId: userRecord.uid,
+    });
+
+  } catch (error) {
+    console.error("Complete signup error:", error);
+    return errorResponse(res, 500, "Failed to complete signup");
+  }
+};
+
+/**
+ * 
  * POST /api/auth/signup
  */
 const signup = async (req, res) => {
@@ -25,21 +186,56 @@ const signup = async (req, res) => {
       return errorResponse(res, 400, error.details.map(d => d.message).join(', '));
     }
 
-    const { email, password, name, role, sport, phoneNumber } = value;
+    // General users info (consistent across the three roles)
+    const {
+      firstName,
+      middleName,
+      lastName,
+      email,
+      password,
+      dateOfBirth,
+      gender,
+      country,
+      city,
+      nationality,
+      phoneNumber,
+      sport,
+      clubName,
+      role,
+    } = value;
+
+    const allowedRoles = [ROLES.ATHLETE, ROLES.COACH, ROLES.SCOUT]; // The three users within the Athlight system
+    /** Checks if the role is one of the three, if not display an error */
+    if (!allowedRoles.includes(role)) {
+      return errorResponse(res, 400, "Invalid role");
+    }
+    const fullName = [firstName, middleName, lastName]
+      .filter(Boolean) // Removes empty values (like missing middleName)
+      .join(" "); // Join with spaces
+
+    const finalRole = role;
 
     // Create user in Firebase Auth
     const userRecord = await auth.createUser({
       email,
       password,
-      displayName: name
+      displayName: fullName
     });
 
     // Create user profile in Firestore
     const userProfile = {
       uid: userRecord.uid,
       email,
-      name,
-      role,
+      fullName: fullName,
+      role: finalRole,
+      dateOfBirth,
+      gender,
+      country,
+      city,
+      nationality,
+      phoneNumber,
+      sport,
+      clubName,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       loginAttempts: 0,
@@ -47,15 +243,15 @@ const signup = async (req, res) => {
     };
 
     // Add role-specific fields
-    if (role === ROLES.ATHLETE && sport) {
+    if (finalRole === ROLES.ATHLETE && sport) {
       userProfile.sport = sport;
       userProfile.videos = [];
       userProfile.stats = {};
     }
 
-    if (phoneNumber) {
+    /** if (phoneNumber) {
       userProfile.phoneNumber = phoneNumber;
-    }
+    } */
 
     // Save to Firestore
     await db.collection('users').doc(userRecord.uid).set(userProfile);
@@ -107,8 +303,8 @@ const login = async (req, res) => {
     if (isAccountLocked(userData)) {
       const minutesRemaining = getLockoutTimeRemaining(userData.lockedUntil);
       return errorResponse(
-        res, 
-        423, 
+        res,
+        423,
         `Account locked due to multiple failed login attempts. Try again in ${minutesRemaining} minutes.`
       );
     }
@@ -117,7 +313,7 @@ const login = async (req, res) => {
     // Note: Firebase Admin SDK doesn't have a direct password verification method
     // In production, the Flutter app will handle this with Firebase Client SDK
     // For now, we'll create a custom token for the user
-    
+
     const customToken = await auth.createCustomToken(userRecord.uid);
 
     // Reset login attempts on successful login
@@ -161,8 +357,8 @@ const login = async (req, res) => {
         await db.collection('users').doc(userRecord.uid).update(updateData);
 
         return errorResponse(
-          res, 
-          401, 
+          res,
+          401,
           `Invalid credentials. ${MAX_LOGIN_ATTEMPTS - newAttempts} attempts remaining.`
         );
       } catch (updateError) {
@@ -257,6 +453,9 @@ const getCurrentUser = async (req, res) => {
 };
 
 module.exports = {
+  saveGeneralInfo,
+  saveAthleteInfo,
+  completeSignup,
   signup,
   login,
   logout,

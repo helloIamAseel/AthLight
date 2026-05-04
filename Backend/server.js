@@ -15,9 +15,11 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 const authRoutes = require('./routes/auth');
+const otpRoutes = require('./routes/otp');  
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/otp', otpRoutes);
 
 // Health check route
 app.get('/', (req, res) => {

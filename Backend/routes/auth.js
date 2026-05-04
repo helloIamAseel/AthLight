@@ -11,6 +11,13 @@ const { verifyToken } = require('../middleware/auth');
 // POST /api/auth/signup - Create new user account
 router.post('/signup', authController.signup);
 
+// POST /api/auth/signup/general-info - Save general info step
+router.post('/signup/general-info', authController.saveGeneralInfo);
+
+router.post('/signup/athlete-info', authController.saveAthleteInfo);
+
+router.post('/signup/complete', authController.completeSignup);
+
 // POST /api/auth/login - User login
 router.post('/login', authController.login);
 

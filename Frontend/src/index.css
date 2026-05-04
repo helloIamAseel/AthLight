@@ -1,0 +1,240 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* AthLight Brand Palette — vibrant, logo-derived */
+    --background: 195 20% 96%;
+    --foreground: 210 45% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 45% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 45% 11%;
+
+    /* Deep Teal-Navy — primary actions */
+    --primary: 195 56% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Green — interactive elements */
+    --secondary: 152 52% 46%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Yellow — spotlight / highlight (sparingly) */
+    --accent: 52 82% 63%;
+    --accent-foreground: 210 45% 11%;
+
+    /* Success */
+    --success: 152 52% 46%;
+    --success-foreground: 0 0% 100%;
+
+    --muted: 195 14% 92%;
+    --muted-foreground: 210 14% 46%;
+
+    --destructive: 0 72% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 195 16% 86%;
+    --input: 195 16% 86%;
+    --ring: 152 52% 46%;
+
+    --radius: 0.75rem;
+
+    /* Brand gradient endpoints (for CSS use) */
+    --brand-blue: 195 56% 38%;
+    --brand-green: 152 52% 46%;
+    --brand-yellow: 52 82% 63%;
+
+    /* Spotlight effect tokens */
+    --spotlight-glow: 152 52% 46%;
+    --spotlight-soft: 52 82% 63%;
+
+    /* Shadows — depth & energy */
+    --shadow-sm: 0 1px 3px 0 hsl(210 45% 11% / 0.06);
+    --shadow-md: 0 4px 16px -3px hsl(210 45% 11% / 0.1);
+    --shadow-lg: 0 12px 36px -8px hsl(210 45% 11% / 0.14);
+    --shadow-spotlight: 0 0 28px -4px hsl(152 52% 46% / 0.22);
+    --shadow-glow: 0 4px 20px -4px hsl(195 56% 38% / 0.25);
+
+    --sidebar-background: 210 45% 11%;
+    --sidebar-foreground: 195 20% 92%;
+    --sidebar-primary: 152 52% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 152 52% 46%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 35% 20%;
+    --sidebar-ring: 152 52% 50%;
+  }
+
+  .dark {
+    --background: 210 40% 7%;
+    --foreground: 195 20% 93%;
+
+    --card: 210 35% 11%;
+    --card-foreground: 195 20% 93%;
+
+    --popover: 210 35% 11%;
+    --popover-foreground: 195 20% 93%;
+
+    --primary: 195 56% 45%;
+    --primary-foreground: 210 40% 7%;
+
+    --secondary: 152 52% 42%;
+    --secondary-foreground: 0 0% 100%;
+
+    --accent: 52 82% 55%;
+    --accent-foreground: 210 40% 7%;
+
+    --success: 152 50% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --muted: 210 30% 15%;
+    --muted-foreground: 195 14% 50%;
+
+    --destructive: 0 65% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 28% 19%;
+    --input: 210 28% 19%;
+    --ring: 152 52% 46%;
+
+    --spotlight-glow: 152 52% 46%;
+    --spotlight-soft: 52 82% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-weight: 700;
+  }
+}
+
+/* Brand gradients & effects */
+@layer utilities {
+  /* Soft gradient background for pages */
+  .bg-brand-gradient {
+    background: linear-gradient(
+      160deg,
+      hsl(195 56% 38% / 0.04) 0%,
+      hsl(152 52% 46% / 0.03) 40%,
+      hsl(52 82% 63% / 0.02) 100%
+    );
+  }
+
+  /* Primary brand gradient: blue → green */
+  .gradient-brand {
+    background: linear-gradient(135deg, hsl(195 56% 38%), hsl(152 52% 46%));
+  }
+
+  /* Existing navy-teal kept for compatibility, now maps to brand */
+  .gradient-navy-teal {
+    background: linear-gradient(135deg, hsl(195 56% 38%), hsl(152 52% 42%));
+  }
+
+  .gradient-teal-green {
+    background: linear-gradient(135deg, hsl(152 52% 46%), hsl(52 82% 63%));
+  }
+
+  /* Full brand sweep: blue → green → yellow */
+  .gradient-brand-full {
+    background: linear-gradient(135deg, hsl(195 56% 38%), hsl(152 52% 46%), hsl(52 82% 63%));
+  }
+
+  .text-gradient-brand {
+    background: linear-gradient(135deg, hsl(195 56% 38%), hsl(152 52% 46%), hsl(52 82% 63%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Spotlight hover — lifts card with glow */
+  .spotlight-hover {
+    @apply transition-all duration-300;
+  }
+  .spotlight-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 28px -6px hsl(var(--spotlight-glow) / 0.2),
+                0 8px 20px -4px hsl(210 45% 11% / 0.1);
+  }
+
+  /* Spotlight border glow on hover */
+  .spotlight-border {
+    @apply border border-transparent transition-all duration-300;
+  }
+  .spotlight-border:hover {
+    border-color: hsl(var(--spotlight-glow) / 0.35);
+  }
+
+  /* Button hover lift */
+  .btn-lift {
+    @apply transition-all duration-200;
+  }
+  .btn-lift:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px -4px hsl(195 56% 38% / 0.3);
+  }
+  .btn-lift:active {
+    transform: translateY(0);
+  }
+
+  /* Logo glow effect */
+  .logo-glow {
+    filter: drop-shadow(0 0 12px hsl(152 52% 46% / 0.25));
+  }
+
+  /* Icon gradient background */
+  .icon-bg-gradient {
+    background: linear-gradient(135deg, hsl(195 56% 38% / 0.12), hsl(152 52% 46% / 0.12));
+  }
+}
+
+@keyframes progress-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-progress-pulse {
+  animation: progress-pulse 2s ease-in-out infinite;
+}
+
+@keyframes spotlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--spotlight-glow) / 0); }
+  50% { box-shadow: 0 0 24px 6px hsl(var(--spotlight-glow) / 0.15); }
+}
+
+.animate-spotlight-pulse {
+  animation: spotlight-pulse 3s ease-in-out infinite;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}

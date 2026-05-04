@@ -32,3 +32,17 @@ AI/computer_vision/models/*.pt
 
 # Environment variables
 .env
+
+# Env files
+.env
+.env.local
+
+# Firebase secrets
+serviceAccountKey.json
+
+# Node
+node_modules/
+
+# Build
+dist/
+build/

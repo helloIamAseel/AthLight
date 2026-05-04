@@ -1,0 +1,132 @@
+/* ===== AppDatePicker ===== */
+
+.app-date-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  position: relative;
+}
+
+/* ===== Popup card ===== */
+.app-date-picker__popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1300;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow:
+    0 4px 6px -1px hsl(var(--foreground) / 0.06),
+    0 10px 30px -5px hsl(var(--foreground) / 0.1);
+  padding: 1rem;
+  animation: appCalSlideIn 0.15s ease-out;
+  overflow: visible;
+}
+
+@keyframes appCalSlideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Caption row (hidden — dropdowns replace it) ===== */
+.app-cal__caption { display: none; }
+.app-cal__nav { display: none; }
+
+/* ===== Calendar grid ===== */
+.app-cal__months {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-cal__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.app-cal__head-row { display: flex; }
+
+.app-cal__head-cell {
+  width: 36px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.app-cal__row { display: flex; }
+
+.app-cal__cell {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+}
+
+/* ===== Day buttons ===== */
+.app-cal__day {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--radius) - 4px);
+  border: none;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 0.8125rem;
+  font-family: inherit;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  outline: none;
+}
+
+.app-cal__day:hover:not(.app-cal__day--selected):not(.app-cal__day--disabled) {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.app-cal__day:focus-visible {
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--ring));
+  outline: none;
+}
+
+.app-cal__day--selected,
+.app-cal__day--selected:hover {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+}
+
+.app-cal__day--today:not(.app-cal__day--selected) {
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+
+.app-cal__day--outside {
+  color: hsl(var(--muted-foreground) / 0.35);
+}
+
+.app-cal__day--outside:hover {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.app-cal__day--disabled,
+.app-cal__day--disabled:hover {
+  color: hsl(var(--muted-foreground) / 0.25);
+  cursor: not-allowed;
+  background: transparent !important;
+}
