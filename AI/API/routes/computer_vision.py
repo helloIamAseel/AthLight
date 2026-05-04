@@ -6,6 +6,14 @@ Endpoints for player tracking, identification, and stats calculation.
 from flask import Blueprint, request
 import json
 from pathlib import Path
+import os
+import time
+import json
+import tempfile
+import requests
+from pathlib import Path
+from datetime import datetime
+from flask import Blueprint, request
  
 # Import CV modules
 from config import PlayerTracker, StatsExtractor, PlayerIdentifier, FieldCalibrator
@@ -18,31 +26,39 @@ def track_video():
     try:
         data = request.json
         
-        # Get video path
-        video_path = data.get('video_path')
-        if not video_path:
-            return {"error": "video_path is required"}, 400
+        # Get video URL
+        video_url = data.get('video_url')
+        if not video_url:
+            return {"error": "video_url is required"}, 400
         
-        # Check if video exists
-        if not Path(video_path).exists():
-            return {"error": f"Video file not found: {video_path}"}, 404
+      # Download video to temp folder
+        import requests
+        import tempfile
+        
+        # Create temp file
+        temp_dir = tempfile.gettempdir()
+        temp_video = os.path.join(temp_dir, f"video_{int(time.time())}.mp4")
+        
+        # Download
+        response = requests.get(video_url, stream=True)
+        with open(temp_video, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        print(f"Video downloaded to: {temp_video}")
         
         # Define output paths
         cv_output_dir = Path(__file__).parent.parent.parent / 'computer_vision' / 'output'
-        cv_output_dir.mkdir(parents=True, exist_ok=True)  # Create if doesn't exist
+        cv_output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Generate unique filename based on timestamp
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        output_video = str(cv_output_dir / f'tracked_{timestamp}.mp4')
         output_json = str(cv_output_dir / f'tracked_{timestamp}_data.json')
         
         # Model path
         model_path = str(Path(__file__).parent.parent.parent / 'computer_vision' / 'models' / 'yolov8n.pt')
         
-        # Initialize and run tracker
-        print(f"Starting tracking for: {video_path}")
+        # Track video (NO output video with boxes needed!)
+        print(f"Starting tracking...")
         tracker = PlayerTracker(
             model_path=model_path,
             confidence=0.2,
@@ -50,20 +66,22 @@ def track_video():
         )
         
         tracking_data = tracker.process_video(
-            video_path=video_path,
-            output_path=output_video
+            video_path=temp_video,
+            output_path=None  # Don't save tracked video!
         )
         
-        # Get results
-        num_players = tracking_data['summary']['valid_unique_players']
+        # Save tracking data JSON
+        with open(output_json, 'w') as f:
+            json.dump(tracking_data, f)
+        
+        # Delete temp video
+        os.remove(temp_video)
         
         return {
             "status": "success",
-            "message": f"Successfully tracked {num_players} players",
-            "num_players": num_players,
+            "message": f"Successfully tracked {tracking_data['summary']['valid_unique_players']} players",
+            "num_players": tracking_data['summary']['valid_unique_players'],
             "tracking_data_path": output_json,
-            "output_video_path": output_video,
-            "video_info": tracking_data['video_info'],
             "player_ids": tracking_data['summary']['player_ids']
         }
         
@@ -100,40 +118,63 @@ def identify_player():
     try:
         data = request.json
         
-        # Required fields
         tracking_data_path = data.get('tracking_data_path')
+        video_url = data.get('video_url')  # Original video URL
+        num_frames = data.get('num_frames')
         clicks = data.get('clicks', [])
         
-        # Validate input
         if not tracking_data_path:
             return {"error": "tracking_data_path is required"}, 400
-        if not clicks or len(clicks) < 1:
-            return {"error": "At least 1 click is required"}, 400
         
-        # Check files exist
-        if not Path(tracking_data_path).exists():
-            return {"error": f"Tracking data not found: {tracking_data_path}"}, 404
-        
-        # Initialize identifier
+        # Create identifier
         identifier = PlayerIdentifier(tracking_data_path=tracking_data_path)
-        
-        # Identify player from clicks
-        print(f"Identifying player from {len(clicks)} click(s)")
-        result = identifier.identify_player_from_multiple_clicks(clicks)
-        
-        if result is None:
+
+        # 1. Extract CLEAN frames
+        if num_frames:
+            # Download original video
+            import requests
+            import tempfile
+            
+            temp_video = os.path.join(tempfile.gettempdir(), f"vid_{int(time.time())}.mp4")
+            response = requests.get(video_url, stream=True)
+            with open(temp_video, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            # Extract clean frames from ORIGINAL video
+            selected_frames = identifier.select_identification_frames(num_frames=int(num_frames))
+            
+            frame_results = []
+            for f in selected_frames:
+                # Extract CLEAN frame 
+                img_path = identifier.get_clean_frame(
+                    frame_number=f['frame_number'],
+                    video_path=temp_video  # Use original video
+                )
+                frame_results.append({
+                    "frame_number": f['frame_number'],
+                    "image_url": img_path
+                })
+            
+            # Delete temp video
+            os.remove(temp_video)
+            
             return {
-                "status": "error",
-                "message": "Could not identify player from provided clicks"
-            }, 400
-        
-        return {
-            "status": "success",
-            "player_id": result['player_id'],
-            "confidence": result['confidence'],
-            "num_clicks": len(clicks),
-            "vote_counts": result.get('vote_counts', {})
-        }
+                "status": "success",
+                "message": "Clean frames extracted successfully",
+                "frames": frame_results
+            }
+
+        # 2. Identify player from clicks
+        if clicks:
+            result = identifier.identify_player_from_multiple_clicks(clicks)
+            return {
+                "status": "success",
+                "player_id": result['player_id'],
+                "confidence": result['confidence']
+            }
+
+        return {"error": "Provide num_frames OR clicks"}, 400
         
     except Exception as e:
         return {"error": f"Identification failed: {str(e)}"}, 500
