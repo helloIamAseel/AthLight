@@ -1,4 +1,13 @@
 {
+  "name": "athlight-backend",
+  "version": "1.0.0",
+  "description": "AthLight Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
     "axios": "^1.15.2",
@@ -12,3 +21,4 @@
     "multer": "^2.1.1"
   }
 }
+
