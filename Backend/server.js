@@ -10,16 +10,19 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));//edit by Sumayah
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));//edit by Sumayah
 
 // Routes
 const authRoutes = require('./routes/auth');
 const otpRoutes = require('./routes/otp');  
+const profileRoutes = require('./routes/profile');//edit by sumaya
+
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/otp', otpRoutes);
+app.use('/api/profile', profileRoutes);//edit by Sumayah
 
 // Health check route
 app.get('/', (req, res) => {
