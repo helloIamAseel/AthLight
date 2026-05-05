@@ -21,7 +21,7 @@ type VideoItem = {
 };
 
 export default function AthleteVideos() {
-  const { isOwner, viewerQuery } = useProfilePermissions("athlete");
+  const { isOwner } = useProfilePermissions("athlete");
 
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState("highest");
@@ -112,7 +112,7 @@ export default function AthleteVideos() {
             <h1 className="text-xl font-bold text-foreground tracking-tight">Athlete Videos</h1>
             <p className="text-sm text-muted-foreground">Browse match and training clips</p>
           </div>
-          <Link to={`/athlete-profile${viewerQuery}`}>
+          <Link to={`/athlete-profile`}>
             <Button variant="outline" size="sm" className="gap-1.5">
               <ArrowLeft size={14} /> Back to Profile
             </Button>
@@ -177,13 +177,19 @@ export default function AthleteVideos() {
                 {isOwner && (
                   <div className="absolute top-2 right-2 flex gap-1.5 z-10 opacity-60 group-hover:opacity-100 transition-opacity duration-200">
                     <button
+                      type="button"
                       onClick={() => toggleFavorite(video.id)}
                       title={video.favorite ? "Remove favorite" : "Add to favorite"}
                       className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground/30 text-background backdrop-blur-sm transition-all duration-200 hover:bg-foreground/60 hover:scale-110"
                     >
-                      <Star size={13} className={video.favorite ? "fill-yellow-400 text-yellow-400" : ""} />
+                      <Star
+                        size={13}
+                        className={video.favorite ? "fill-yellow-400 text-yellow-400" : ""}
+                      />
                     </button>
+
                     <button
+                      type="button"
                       onClick={() => openDeleteModal(video.id)}
                       title="Delete video"
                       className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground/30 text-background backdrop-blur-sm transition-all duration-200 hover:bg-destructive/70 hover:scale-110"
@@ -251,5 +257,6 @@ export default function AthleteVideos() {
         </div>
       )}
     </div>
+
   );
 }

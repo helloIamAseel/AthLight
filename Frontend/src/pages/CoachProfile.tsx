@@ -192,20 +192,8 @@ export default function CoachProfile() {
                   <div className="profile-name">
                     <h2>
                       Saad Al-Sharif
-                      {verificationStatus === "verified" && (
-                        <span style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: "2px 8px",
-                          borderRadius: 12,
-                          background: "hsl(152 52% 46% / 0.12)",
-                          color: "hsl(152 52% 40%)",
-                          verticalAlign: "middle",
-                        }}>
-                          ✓ Verified Coach
-                        </span>
-                      )}
+
+
                     </h2>
 
                     <div className="profile-stats-row">
@@ -227,8 +215,7 @@ export default function CoachProfile() {
 
                     <div className="profile-tags">
                       <span className="tag tag-sport">Tactical Coach</span>
-                      <span className="tag tag-pos">Finishing</span>
-                      <span className="tag tag-club">Youth Development</span>
+
                     </div>
 
                     <div className="profile-quick">
@@ -431,13 +418,12 @@ export default function CoachProfile() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: "hsl(210 45% 11%)" }}>{item.player}</span>
                     <span
-                      className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-extrabold text-white ${
-                        item.score >= 7
+                      className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-extrabold text-white ${item.score >= 7
                           ? "bg-gradient-to-r from-[hsl(152_52%_46%)] to-[hsl(149_46%_56%)]"
                           : item.score >= 4
-                          ? "bg-gradient-to-r from-[hsl(45_80%_50%)] to-[hsl(53_82%_63%)]"
-                          : "bg-gradient-to-r from-destructive to-[hsl(0_60%_55%)]"
-                      }`}
+                            ? "bg-gradient-to-r from-[hsl(45_80%_50%)] to-[hsl(53_82%_63%)]"
+                            : "bg-gradient-to-r from-destructive to-[hsl(0_60%_55%)]"
+                        }`}
                     >
                       {item.score.toFixed(1)}/10
                     </span>
@@ -445,11 +431,10 @@ export default function CoachProfile() {
 
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <span
-                      className={`shrink-0 inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${
-                        item.type === "Training"
+                      className={`shrink-0 inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${item.type === "Training"
                           ? "bg-gradient-to-r from-secondary to-[hsl(152_52%_46%)]"
                           : "bg-gradient-to-r from-primary to-secondary"
-                      }`}
+                        }`}
                     >
                       {item.type}
                     </span>

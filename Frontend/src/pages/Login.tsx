@@ -1,15 +1,27 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "@/components/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/firebase";
 
 const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  /*useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        navigate("/athlete-profile");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [navigate]);*/
 
   const validate = () => {
     const e: { email?: string; password?: string } = {};
@@ -21,10 +33,44 @@ const Login = () => {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  //UPDATR
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    console.log("Login:", { email, password });
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const token = await userCredential.user.getIdToken();
+
+      console.log("TOKEN:", token);
+
+      const res = await fetch("http://localhost:3000/api/profile/me", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+
+      console.log("PROFILE:", data);
+
+      if (data.role === "athlete") {
+        navigate("/athlete-profile");
+      } else if (data.role === "coach") {
+        navigate("/coach-profile");
+      } else if (data.role === "scout") {
+        navigate("/scout-profile");
+      } else {
+        navigate("/feed");
+      }
+
+    } catch (error) {
+      console.error("Login error:", error);
+    }
   };
 
   return (
@@ -43,7 +89,7 @@ const Login = () => {
             <Input
               type="email"
               value={email}
-              onChange={(e) => { const v = e.target.value; setEmail(v); if (!v.trim()) setErrors(p => ({...p, email: "Please enter your email address."})); else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) setErrors(p => ({...p, email: "An email address must contain a single @."})); else setErrors(p => ({...p, email: undefined})); }}
+              onChange={(e) => { const v = e.target.value; setEmail(v); if (!v.trim()) setErrors(p => ({ ...p, email: "Please enter your email address." })); else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) setErrors(p => ({ ...p, email: "An email address must contain a single @." })); else setErrors(p => ({ ...p, email: undefined })); }}
               placeholder="example: someone@example.com"
             />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}

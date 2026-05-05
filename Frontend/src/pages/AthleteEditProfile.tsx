@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { auth } from "@/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,16 +30,16 @@ type FormData = {
   city: string;
   phoneNumber: string;
   nationality: string;
-  sportType: string;
+  sport: string;
   clubName: string;
   email: string;
   playerPosition: string;
+  preferredSide: string;
   height: string;
   weight: string;
-  
   injuryHistory: string;
   biography: string;
-  seasonFocus: string;
+  skills: string[];
   whatsapp: string;
   twitter: string;
 };
@@ -92,6 +94,8 @@ const positions = [
   "Attacking Midfielder", "Right Winger", "Left Winger", "Striker",
 ];
 
+const preferredSides = ["Right", "Left", "Both"];
+
 /* ── Helpers ── */
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -131,27 +135,27 @@ function Field({
 /* ── Main Component ── */
 
 const initialData: FormData = {
-  firstName: "Mohammed",
+  firstName: "",
   middleName: "",
-  lastName: "Al-Harbi",
+  lastName: "",
   dateOfBirth: "",
-  gender: "Male",
-  country: "SA",
-  city: "Riyadh",
-  phoneNumber: "5XXXXXXXX",
-  nationality: "Saudi",
-  sportType: "Football",
-  clubName: "Al Hilal",
-  email: "mohammed@example.com",
-  playerPosition: "Forward",
-  height: "178",
-  weight: "73",
-  
-  injuryHistory: "Minor ankle strain in a previous training cycle. Fully recovered and cleared for full activity.",
-  biography: "Fast attacking forward with strong movement off the ball, sharp finishing instincts, and improving decision-making in transitions and tight spaces.",
-  seasonFocus: "Improve weak-foot finishing, increase consistency across full matches, and become more effective under pressure in the final third.",
-  whatsapp: "Available to agents",
-  twitter: "@moh_alharbi",
+  gender: "",
+  country: "",
+  city: "",
+  phoneNumber: "",
+  nationality: "",
+  sport: "",
+  clubName: "",
+  email: "",
+  playerPosition: "",
+  preferredSide: "",
+  height: "",
+  weight: "",
+  injuryHistory: "",
+  biography: "",
+  skills: ["", "", "", "", "", ""],
+  whatsapp: "",
+  twitter: "",
 };
 
 export default function AthleteEditProfile() {
@@ -160,24 +164,103 @@ export default function AthleteEditProfile() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState("");
 
+  const isLoadingProfile = useRef(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+
+      const token = await user.getIdToken();
+
+      const res = await fetch("http://localhost:3000/api/profile/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      const countryCode =
+        countries.find((c) => c.code === data.country)?.code ||
+        countries.find((c) => c.label === data.country)?.code ||
+        data.country ||
+        "";
+
+      const cityValue = data.city ? String(data.city).trim() : "";
+
+      setFormData((prev) => ({
+        ...prev,
+        firstName: data.firstName ?? "",
+        middleName: data.middleName ?? "",
+        lastName: data.lastName ?? "",
+        dateOfBirth: data.dateOfBirth?._seconds
+          ? new Date(data.dateOfBirth._seconds * 1000).toISOString().split("T")[0]
+          : data.dateOfBirth ?? "",
+        gender: data.gender ?? "",
+        country: countryCode,
+        city: cityValue,
+        phoneNumber: data.phoneNumber ?? "",
+        nationality: data.nationality ?? "",
+        sport: data.sport ?? "",
+        clubName: data.clubName ?? "",
+        email: data.email ?? "",
+        playerPosition: data.playerPosition ?? "",
+        preferredSide: data.preferredSide ?? "",
+        height: data.height ? String(data.height) : "",
+        weight: data.weight ? String(data.weight) : "",
+        injuryHistory: data.injuryHistory ?? "",
+        biography: data.biography ?? "",
+        skills: data.skills ?? ["", "", "", "", "", ""],
+        whatsapp: data.whatsapp ?? "",
+        twitter: data.twitter ?? "",
+      }));
+
+      setTimeout(() => {
+        isLoadingProfile.current = false;
+      }, 0);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const requiredFields: (keyof FormData)[] = [
     "firstName", "lastName", "dateOfBirth", "gender", "country",
-    "city", "phoneNumber", "nationality", "sportType", "clubName",
+    "city", "phoneNumber", "nationality", "sport", "clubName",
     "email", "playerPosition", "height", "weight",
   ];
 
-  const availableCities = formData.country ? (CITIES_BY_COUNTRY_CODE[formData.country] ?? []) : [];
+  const baseCities = formData.country ? (CITIES_BY_COUNTRY_CODE[formData.country] ?? []) : [];
+
+  const availableCities =
+    formData.city && !baseCities.includes(formData.city)
+      ? [formData.city, ...baseCities]
+      : baseCities;
+
   const selectedPhoneRule = phoneValidation[formData.country];
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
-      if (field === "country" && value !== prev.country) {
+
+      if (field === "country" && value !== prev.country && !isLoadingProfile.current) {
         next.city = "";
         next.phoneNumber = "";
       }
+
+      if (field === "sport" && value !== prev.sport && !isLoadingProfile.current) {
+        if (value === "Football") {
+          next.preferredSide = "";
+        } else if (value === "Padel") {
+          next.playerPosition = "";
+        } else {
+          next.playerPosition = "";
+          next.preferredSide = "";
+        }
+      }
+
       return next;
     });
+
     setErrors((prev) => {
       const updated = { ...prev, [field]: "" };
       if (field === "country") {
@@ -186,44 +269,84 @@ export default function AthleteEditProfile() {
       }
       return updated;
     });
+
     setSavedMessage("");
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    requiredFields.forEach((field) => {
-      if (!formData[field].trim()) newErrors[field] = "This field is required";
-    });
-    // Email validation
+
+    if (!formData.skills[0]?.trim()) {
+      newErrors.skills = "Skill 1 is required";
+    }
+
     if (formData.email.trim() && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.email)) {
       newErrors.email = "An email address must contain a single @.";
     }
-    // Phone validation (matching Register)
+
     if (formData.country && formData.phoneNumber.trim()) {
       const rule = phoneValidation[formData.country];
       if (rule && !rule.pattern.test(formData.phoneNumber)) {
         newErrors.phoneNumber = `Invalid format (e.g. ${rule.example})`;
       }
     }
-    // Age validation based on sport (matching Register)
+
+    if (formData.sport === "Football" && !formData.playerPosition) {
+      newErrors.playerPosition = "Player position is required";
+    }
+
+    if (formData.sport === "Padel" && !formData.preferredSide) {
+      newErrors.preferredSide = "Preferred side is required";
+    }
+
     if (formData.dateOfBirth) {
       const birth = new Date(formData.dateOfBirth);
       const today = new Date();
       let age = today.getFullYear() - birth.getFullYear();
       const md = today.getMonth() - birth.getMonth();
       if (md < 0 || (md === 0 && today.getDate() < birth.getDate())) age--;
-      const sportAgeRange = getSportAgeRange(formData.sportType);
+      const sportAgeRange = getSportAgeRange(formData.sport);
       if (age < sportAgeRange.min || age > sportAgeRange.max) {
         newErrors.dateOfBirth = `Age must be between ${sportAgeRange.min} and ${sportAgeRange.max} for ${sportAgeRange.label}.`;
       }
     }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) { setSavedMessage(""); return; }
+
+    if (!validateForm()) {
+      setSavedMessage("");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const token = await user.getIdToken();
+
+    await fetch("http://localhost:3000/api/profile/me", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        ...formData,
+        playerPosition: formData.sport === "Football" ? formData.playerPosition : "",
+        preferredSide: formData.sport === "Padel" ? formData.preferredSide : "",
+        fullName: `${formData.firstName} ${formData.lastName}`
+          .replace(/\s+/g, " ")
+          .trim(),
+        height: Number(formData.height),
+        weight: Number(formData.weight),
+        skills: formData.skills.filter((skill) => skill.trim() !== ""),
+      }),
+    });
+
     setSavedMessage("Changes saved successfully.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -236,7 +359,6 @@ export default function AthleteEditProfile() {
 
   return (
     <div className="min-h-screen bg-background bg-brand-gradient">
-      {/* ── Header ── */}
       <header className="sticky top-0 z-30 border-b border-border/40 bg-card/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           <button
@@ -253,7 +375,6 @@ export default function AthleteEditProfile() {
         </div>
       </header>
 
-      {/* ── Success Banner ── */}
       {savedMessage && (
         <div className="mx-auto max-w-3xl px-4 pt-3">
           <div className="flex items-center gap-2 rounded-xl border border-secondary/30 bg-secondary/10 px-4 py-3 text-sm font-medium text-secondary">
@@ -263,22 +384,23 @@ export default function AthleteEditProfile() {
         </div>
       )}
 
-      {/* ── Form ── */}
       <form onSubmit={handleSave} className="mx-auto max-w-3xl px-4 py-6 pb-32 space-y-6">
-
-        {/* Personal Information */}
         <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm p-5 space-y-4">
           <SectionTitle>Personal Information</SectionTitle>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="First Name" required error={errors.firstName}>
               <Input value={formData.firstName} onChange={(e) => handleChange("firstName", e.target.value)} placeholder="First Name" />
             </Field>
+
             <Field label="Middle Name">
               <Input value={formData.middleName} onChange={(e) => handleChange("middleName", e.target.value)} placeholder="Middle Name" />
             </Field>
+
             <Field label="Last Name" required error={errors.lastName}>
               <Input value={formData.lastName} onChange={(e) => handleChange("lastName", e.target.value)} placeholder="Last Name" />
             </Field>
+
             <Field label="Date of Birth" required error={errors.dateOfBirth}>
               <AppDatePicker
                 value={formData.dateOfBirth}
@@ -288,6 +410,7 @@ export default function AthleteEditProfile() {
                 error={!!errors.dateOfBirth}
               />
             </Field>
+
             <Field label="Gender" required error={errors.gender}>
               <Select value={formData.gender} onValueChange={(v) => handleChange("gender", v)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
@@ -297,6 +420,7 @@ export default function AthleteEditProfile() {
                 </SelectContent>
               </Select>
             </Field>
+
             <Field label="Country" required error={errors.country}>
               <Select value={formData.country} onValueChange={(v) => handleChange("country", v)}>
                 <SelectTrigger><SelectValue placeholder="Select Country" /></SelectTrigger>
@@ -307,6 +431,7 @@ export default function AthleteEditProfile() {
                 </SelectContent>
               </Select>
             </Field>
+
             <Field label="City" required error={errors.city}>
               <Select value={formData.city} onValueChange={(v) => handleChange("city", v)} disabled={!formData.country}>
                 <SelectTrigger><SelectValue placeholder={formData.country ? "Select City" : "Select country first"} /></SelectTrigger>
@@ -317,6 +442,7 @@ export default function AthleteEditProfile() {
                 </SelectContent>
               </Select>
             </Field>
+
             <Field label="Phone Number" required error={errors.phoneNumber}>
               <div className="flex gap-2">
                 {formData.country && selectedPhoneRule && (
@@ -336,6 +462,7 @@ export default function AthleteEditProfile() {
                 <p className="mt-1 text-xs text-muted-foreground">{selectedPhoneRule.minLength} digits required</p>
               )}
             </Field>
+
             <Field label="Nationality" required error={errors.nationality}>
               <Select value={formData.nationality} onValueChange={(v) => handleChange("nationality", v)}>
                 <SelectTrigger><SelectValue placeholder="Select Nationality" /></SelectTrigger>
@@ -349,28 +476,30 @@ export default function AthleteEditProfile() {
           </div>
         </div>
 
-        {/* Account & Contact */}
         <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm p-5 space-y-4">
           <SectionTitle>Account & Contact</SectionTitle>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="Email" required error={errors.email}>
               <Input type="email" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} placeholder="Enter your email" />
             </Field>
+
             <Field label="WhatsApp / Availability">
               <Input value={formData.whatsapp} onChange={(e) => handleChange("whatsapp", e.target.value)} placeholder="WhatsApp status" />
             </Field>
+
             <Field label="Twitter / X">
               <Input value={formData.twitter} onChange={(e) => handleChange("twitter", e.target.value)} placeholder="@username" />
             </Field>
           </div>
         </div>
 
-        {/* Athlete Overview */}
         <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm p-5 space-y-4">
           <SectionTitle>Athlete Overview</SectionTitle>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Field label="Sport Type" required error={errors.sportType}>
-              <Select value={formData.sportType} onValueChange={(v) => handleChange("sportType", v)}>
+            <Field label="Sport Type" required error={errors.sport}>
+              <Select value={formData.sport} onValueChange={(v) => handleChange("sport", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {["Football", "Swimming", "Running", "Padel"].map((s) => (
@@ -379,43 +508,116 @@ export default function AthleteEditProfile() {
                 </SelectContent>
               </Select>
             </Field>
+
             <Field label="Club Name" required error={errors.clubName}>
               <Input value={formData.clubName} onChange={(e) => handleChange("clubName", e.target.value)} placeholder="Club Name" />
             </Field>
-            <Field label="Player Position" required error={errors.playerPosition}>
-              <Select value={formData.playerPosition} onValueChange={(v) => handleChange("playerPosition", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {positions.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <Field
+              label={formData.sport === "Padel" ? "Preferred Side" : "Player Position"}
+              required={formData.sport === "Football" || formData.sport === "Padel"}
+              error={formData.sport === "Padel" ? errors.preferredSide : errors.playerPosition}
+            >
+              {formData.sport === "Padel" ? (
+                <Select
+                  value={formData.preferredSide}
+                  onValueChange={(v) => handleChange("preferredSide", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Preferred Side" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {preferredSides.map((side) => (
+                      <SelectItem key={side} value={side}>
+                        {side}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select
+                  value={formData.playerPosition}
+                  onValueChange={(v) => handleChange("playerPosition", v)}
+                  disabled={formData.sport !== "Football"}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        formData.sport === "Football"
+                          ? "Select Player Position"
+                          : "Not required for this sport"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {positions.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
+
             <Field label="Height (cm)" required error={errors.height}>
               <Input inputMode="numeric" value={formData.height} onChange={(e) => handleChange("height", e.target.value.replace(/\D/g, ""))} placeholder="Height" />
             </Field>
+
             <Field label="Weight (kg)" required error={errors.weight}>
               <Input inputMode="numeric" value={formData.weight} onChange={(e) => handleChange("weight", e.target.value.replace(/\D/g, ""))} placeholder="Weight" />
             </Field>
           </div>
         </div>
 
-        {/* Bio & Notes */}
         <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm p-5 space-y-4">
           <SectionTitle>Overview Content</SectionTitle>
+
           <Field label="Biography">
             <Textarea rows={4} value={formData.biography} onChange={(e) => handleChange("biography", e.target.value)} placeholder="Player bio shown in overview" />
           </Field>
-          <Field label="Season Focus">
-            <Textarea rows={3} value={formData.seasonFocus} onChange={(e) => handleChange("seasonFocus", e.target.value)} placeholder="Current season goals and focus areas" />
-          </Field>
+
+          <h3 className="text-sm font-medium text-card-foreground">
+            Skills & Strengths
+          </h3>
+
+          <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[0, 1, 2, 3, 4, 5].map((index) => (
+                <Field
+                  key={index}
+                  label={`Skill Tag ${index + 1}`}
+                  required={index === 0}
+                  error={index === 0 ? errors.skills : undefined}
+                >
+                  <Input
+                    value={formData.skills[index] ?? ""}
+                    onChange={(e) => {
+                      const updatedSkills = [...formData.skills];
+                      updatedSkills[index] = e.target.value;
+
+                      setFormData((prev) => ({
+                        ...prev,
+                        skills: updatedSkills,
+                      }));
+
+                      setErrors((prev) => ({
+                        ...prev,
+                        skills: "",
+                      }));
+
+                      setSavedMessage("");
+                    }}
+                    placeholder={index === 0 ? "Required skill" : "Optional skill"}
+                  />
+                </Field>
+              ))}
+            </div>
+          </div>
+
           <Field label="Injury History / Medical Notes">
             <Textarea rows={3} value={formData.injuryHistory} onChange={(e) => handleChange("injuryHistory", e.target.value)} placeholder="Relevant injury notes" />
           </Field>
         </div>
 
-        {/* Actions */}
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/40 bg-card/95 backdrop-blur-xl">
           <div className="mx-auto max-w-3xl flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-2">

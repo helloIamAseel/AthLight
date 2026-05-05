@@ -10,6 +10,11 @@ import { useProfilePermissions } from "@/hooks/useProfilePermissions";
 import "./AthleteProfile.css";
 import athlightLogo from "@/assets/athlight_logo_v2.png";
 import athlightLogoOriginal from "@/assets/athlight_logo.png";
+import { auth } from "@/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { Athlete } from '../components/feed/types';
+import { storage } from "@/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 type TabId = "bio" | "injuries";
 
@@ -28,9 +33,43 @@ type ProfileVideoItem = {
   stats: { speed: string; distance: string; agility: string };
 };
 
+type AthleteProfileData = {
+  id: string;
+  uid?: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  city?: string;
+  country?: string;
+  nationality?: string;
+  sport?: string;
+  clubName?: string;
+  phoneNumber?: string;
+  fullPhone?: string;
+  gender?: string;
+  role?: string;
+  playerPosition?: string;
+  height?: string | number;
+  weight?: string | number;
+  biography?: string;
+  injuryHistory?: string;
+  twitter?: string;
+  whatsapp?: string;
+  skills?: string[];
+  followersCount?: number;
+  followingCount?: number;
+  videoCount?: number;
+  videos?: unknown[];
+  dateOfBirth?: unknown;
+  profileImage?: string;
+  preferredSide?: string;
+};
+
 export default function AthleteProfile() {
+
   const navigate = useNavigate();
-  const { viewer, isOwner, isCoachViewer, viewerQuery, canViewAthleteReports } =
+  const { viewer, isOwner, isCoachViewer, canViewAthleteReports } =
     useProfilePermissions("athlete");
 
   const handleReturnToApp = () => navigate("/feed");
@@ -38,9 +77,14 @@ export default function AthleteProfile() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("bio");
   const [activeNav, setActiveNav] = useState("overview");
+  const [profile, setProfile] = useState<AthleteProfileData | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(true);
+
   const [showVideoDeleteModal, setShowVideoDeleteModal] = useState(false);
   const [selectedProfileVideoId, setSelectedProfileVideoId] = useState<number | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
 
   const [topVideos, setTopVideos] = useState<ProfileVideoItem[]>([
     {
@@ -117,6 +161,38 @@ export default function AthleteProfile() {
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        console.log("No logged-in user");
+        return;
+      }
+
+      try {
+        const token = await user.getIdToken();
+
+        const res = await fetch("http://localhost:3000/api/profile/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+        console.log("ATHLETE PROFILE:", data);
+
+        setLoading(false);
+
+
+        setProfile(data);
+      } catch (error) {
+        console.error("Failed to fetch athlete profile:", error);
+      }
+    });
+
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     const sectionIds = ["overview-section", "dashboard-section", "videos-section"];
     const navMap: Record<string, string> = {
       "overview-section": "overview",
@@ -153,14 +229,167 @@ export default function AthleteProfile() {
 
     return () => observer.disconnect();
   }, []);
+  const getAge = (dateOfBirth: unknown) => {
+    if (!dateOfBirth) return "-";
+
+    let birthDate: Date;
+
+    if (
+      typeof dateOfBirth === "object" &&
+      dateOfBirth !== null &&
+      "_seconds" in dateOfBirth
+    ) {
+      const ts = dateOfBirth as { _seconds: number };
+      birthDate = new Date(ts._seconds * 1000);
+    }
+    else {
+      birthDate = new Date(dateOfBirth as string);
+    }
+
+    if (isNaN(birthDate.getTime())) return "-";
+
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    const dayDiff = today.getDate() - birthDate.getDate();
+
+    if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+      age--;
+    }
+
+    return age;
+  };
+
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const imageRef = ref(storage, `profileImages/${user.uid}/${Date.now()}-${file.name}`);
+
+      await uploadBytes(imageRef, file);
+
+      const imageUrl = await getDownloadURL(imageRef);
+
+      const token = await user.getIdToken();
+
+      await fetch("http://localhost:3000/api/profile/me", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          profileImage: imageUrl,
+        }),
+      });
+
+      setProfile((prev) =>
+        prev ? { ...prev, profileImage: imageUrl } : prev
+      );
+    } catch (err) {
+      console.error("Upload failed:", err);
+    }
+  };
+
+  const athleteAge = getAge(profile?.dateOfBirth);
+
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const getInitials = (name?: string) => {
+    if (!name) return "?";
+
+    const parts = name.trim().split(" ");
+
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+
+  const completionItems = [
+    { label: "Account setup", done: !!profile?.email, pct: 10 },
+    { label: "Upload photo", done: !!profile?.profileImage, pct: 20 },
+    {
+      label: "Personal info",
+      done:
+        !!profile?.fullName &&
+        !!profile?.dateOfBirth &&
+        !!profile?.gender &&
+        !!profile?.city &&
+        !!profile?.country &&
+        !!profile?.height &&
+        !!profile?.weight &&
+        !!profile?.nationality &&
+        !!profile?.playerPosition &&
+        !!profile?.sport,
+      pct: 15,
+    },
+    { label: "Injury history", done: !!profile?.injuryHistory, pct: 10 },
+    { label: "Biography", done: !!profile?.biography, pct: 15 },
+    { label: "Skills & Strengths", done: !!profile?.skills?.length, pct: 15 },
+    { label: "Contact info", done: !!profile?.phoneNumber || !!profile?.whatsapp || !!profile?.twitter, pct: 15 },
+  ];
+
+  const completionPercent = completionItems.reduce(
+    (total, item) => total + (item.done ? item.pct : 0),
+    0
+  );
+
+  const performanceSummary = {
+    peakSpeed: "31 km/h",
+    distance: "5 km",
+    agility: "92%",
+    feedbackScore: "8.6 / 10",
+  }; 
+
+
+  const monthlyPerformance = [
+    { month: "Jan", value: 25 },
+    { month: "Feb", value: 42 },
+    { month: "Mar", value: 35 },
+    { month: "Apr", value: 55 },
+    { month: "May", value: 48 },
+    { month: "Jun", value: 75 },
+    { month: "Jul", value: 62 },
+  ];
+
+  const generatePath = () => {
+    const startX = 45;
+    const stepX = 57;
+
+    return monthlyPerformance
+      .map((point, i) => {
+        const x = startX + i * stepX;
+
+        // نحول القيمة (0 - 100) إلى موقع Y داخل الشارت
+        const y = 190 - (point.value / 100) * 160;
+
+        return `${i === 0 ? "M" : "L"}${x},${y}`;
+      })
+      .join(" ");
+  };
+
+
   return (
     <div className="athlete-profile-page">
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileInputRef}
+        style={{ display: "none" }}
+        onChange={handleImageUpload}
+      />
 
       <div className="shell">
 
@@ -222,7 +451,7 @@ export default function AthleteProfile() {
                 <button
                   type="button"
                   className="nav-item"
-                  onClick={() => navigate(`/reports${viewerQuery}`)}
+                  onClick={() => navigate(`/reports`)}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -241,10 +470,10 @@ export default function AthleteProfile() {
           {/* Sidebar Bottom */}
           <div className="sidebar-bottom">
             <div className="athlete-mini">
-              <div className="avatar-sm">MA</div>
+              {profile?.fullName?.slice(0, 2).toUpperCase() ?? "-"}
               <div className="athlete-mini-info">
-                <div className="athlete-mini-name">Mohammed Al-Harbi</div>
-                <div className="athlete-mini-sub">Athlete · Al Hilal</div>
+                <div className="athlete-mini-name">{profile?.fullName ?? "-"}</div>
+                <div className="athlete-mini-sub">Athlete · {profile?.clubName ?? "-"}</div>
               </div>
               {isOwner && (
                 <button
@@ -276,7 +505,23 @@ export default function AthleteProfile() {
               <div className="profile-card-toprow">
                 <div className="profile-header">
                   <div className="profile-avatar-wrap">
-                    <div className="profile-avatar">MA</div>
+                    <div className="profile-avatar">
+                      {profile?.profileImage ? (
+                        <img src={profile.profileImage} alt="avatar" />
+                      ) : (
+                        getInitials(profile?.fullName)
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="edit-avatar-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Change photo"
+                    >
+                      <Pencil size={14} />
+                    </button>
+
                     <div className="verified-badge">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="white">
                         <polyline points="20 6 9 17 4 12" />
@@ -285,31 +530,36 @@ export default function AthleteProfile() {
                   </div>
 
                   <div className="profile-name">
-                    <h2>Mohammed Al-Harbi</h2>
+                    <h2>{loading ? "Loading..." : profile?.fullName || "-"}</h2>
 
                     {/* Stats Row */}
                     <div className="profile-stats-row">
                       <div className="profile-stat">
-                        <span className="ps-num">1253</span>
+                        <span className="ps-num">{profile?.followersCount ?? 0}</span>
                         <span className="ps-lbl">Followers</span>
                       </div>
                       <div className="profile-stat-divider" />
                       <div className="profile-stat">
-                        <span className="ps-num">89</span>
+                        <span className="ps-num">{profile?.followingCount ?? 0}</span>
                         <span className="ps-lbl">Following</span>
                       </div>
                       <div className="profile-stat-divider" />
                       <div className="profile-stat">
-                        <span className="ps-num">7</span>
+                        <span className="ps-num">{profile?.videos?.length ?? profile?.videoCount ?? 0}</span>
                         <span className="ps-lbl">Videos</span>
                       </div>
                     </div>
 
                     {/* Tags */}
                     <div className="profile-tags">
-                      <span className="tag tag-sport">Football</span>
-                      <span className="tag tag-pos">Forward</span>
-                      <span className="tag tag-club">Al Hilal</span>
+                      <span className="tag tag-sport">{profile?.sport ?? "-"}</span>
+                      <span className="tag tag-pos">
+                        {profile?.sport === "Padel"
+                          ? profile?.preferredSide ?? "-"
+                          : profile?.sport === "Football"
+                            ? profile?.playerPosition ?? "-"
+                            : "-"}
+                      </span>                      <span className="tag tag-club">{loading ? "Loading..." : profile?.clubName || "-"}</span>
                     </div>
 
                     {/* Quick Info */}
@@ -319,14 +569,14 @@ export default function AthleteProfile() {
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                           <circle cx="12" cy="10" r="3" />
                         </svg>
-                        Riyadh, KSA
+                        {loading ? "Loading..." : profile?.city || "-"}, {loading ? "Loading..." : profile?.country || "-"}
                       </span>
                       <span className="quick-item">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <circle cx="12" cy="12" r="10" />
                           <polyline points="12 6 12 12 16 14" />
                         </svg>
-                        Age 23
+                        Age {athleteAge}
                       </span>
                     </div>
                   </div>
@@ -357,9 +607,9 @@ export default function AthleteProfile() {
               {/* Meta Grid */}
               <div className="meta-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
                 {[
-                  { label: "Height", value: "178 cm" },
-                  { label: "Weight", value: "73 kg" },
-                  { label: "Nationality", value: "Saudi" },
+                  { label: "Height", value: profile?.height ? `${profile.height} cm` : "Loading..." },
+                  { label: "Weight", value: profile?.weight ? `${profile.weight} kg` : "Loading..." },
+                  { label: "Nationality", value: profile?.nationality ?? "Loading..." },
                 ].map((m) => (
                   <div className="meta-box" key={m.label}>
                     <div className="meta-label">{m.label}</div>
@@ -386,14 +636,19 @@ export default function AthleteProfile() {
                 <div className="tab-content">
                   <div className="info-section">
                     <h4>Player Bio</h4>
-                    <p>
-                      Fast attacking forward with strong movement off the ball, sharp finishing instincts,
-                      and improving decision-making in transitions and tight spaces.
-                    </p>
-                    <div className="skill-tags">
-                      {["Speed", "Finishing", "Positioning", "Pressing", "1v1 Dribbling"].map((s) => (
-                        <span className="skill-tag" key={s}>{s}</span>
-                      ))}
+                    <p>{loading ? "Loading..." : profile?.biography || "-"}</p>
+
+                    <div className="skills-strengths-section">
+                      <h4>Skills &amp; Strengths</h4>
+                      <div className="skill-tags">
+                        {profile?.skills?.length ? (
+                          profile.skills.map((s) => (
+                            <span className="skill-tag" key={s}>{s}</span>
+                          ))
+                        ) : (
+                          <span className="skill-tag">-</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -410,8 +665,7 @@ export default function AthleteProfile() {
                         </div>
                         <div>
                           <div className="cd-label">Phone</div>
-                          <div className="cd-val">+966 504 988 092</div>
-                        </div>
+                          <div className="cd-val">{loading ? "Loading..." : profile?.phoneNumber || "-"}</div>                        </div>
                       </div>
 
                       <div className="contact-item">
@@ -423,8 +677,7 @@ export default function AthleteProfile() {
                         </div>
                         <div>
                           <div className="cd-label">Email</div>
-                          <div className="cd-val">mohammed@email.com</div>
-                        </div>
+                          <div className="cd-val">{loading ? "Loading..." : profile?.email || "-"}</div>                        </div>
                       </div>
 
                       <div className="contact-item">
@@ -435,8 +688,7 @@ export default function AthleteProfile() {
                         </div>
                         <div>
                           <div className="cd-label">Twitter / X</div>
-                          <div className="cd-val">@moh_alharbi</div>
-                        </div>
+                          <div className="cd-val">{loading ? "Loading..." : profile?.twitter || "-"}</div>                        </div>
                       </div>
 
                       <div className="contact-item">
@@ -447,8 +699,7 @@ export default function AthleteProfile() {
                         </div>
                         <div>
                           <div className="cd-label">WhatsApp</div>
-                          <div className="cd-val">Available to agents</div>
-                        </div>
+                          <div className="cd-val">{loading ? "Loading..." : profile?.whatsapp || "-"}</div>                        </div>
                       </div>
 
                     </div>
@@ -461,7 +712,7 @@ export default function AthleteProfile() {
                 <div className="tab-content">
                   <div className="info-section">
                     <h4>Injury History</h4>
-                    <p>No major injuries recorded. Minor ankle strain in a previous training cycle. Currently fit and available for selection.</p>
+                    <p>{loading ? "Loading..." : profile?.injuryHistory || "-"}</p>
                   </div>
                 </div>
               )}
@@ -472,22 +723,20 @@ export default function AthleteProfile() {
               <div className="completion-card card">
                 <h3>Profile completion</h3>
 
-                <div className="progress-ring">
+                <div
+                  className="progress-ring"
+                  style={{
+                    background: `conic-gradient(#22a66f ${completionPercent * 3.6}deg, #e5e7eb 0deg)`,
+                  }}
+                >
                   <div className="progress-inner">
-                    <strong>40%</strong>
+                    <strong>{completionPercent}%</strong>
                     <span>complete</span>
                   </div>
                 </div>
 
                 <div className="completion-list">
-                  {[
-                    { label: "Account setup",  done: true,  pct: "10%" },
-                    { label: "Upload photo",   done: true,  pct: "5%"  },
-                    { label: "Personal info",  done: true,  pct: "10%" },
-                    { label: "Injury history", done: false, pct: "+20%" },
-                    { label: "Biography",      done: true,  pct: "15%" },
-                    { label: "Contact info",   done: false, pct: "+12%" },
-                  ].map((item) => (
+                  {completionItems.map((item) => (
                     <div className="comp-item" key={item.label}>
                       <div className={`comp-icon ${item.done ? "ci-done" : "ci-miss"}`}>
                         {item.done ? (
@@ -501,8 +750,12 @@ export default function AthleteProfile() {
                           </svg>
                         )}
                       </div>
+
                       <span className="comp-label">{item.label}</span>
-                      <span className={item.done ? "pct-done" : "pct-add"}>{item.pct}</span>
+
+                      <span className={item.done ? "pct-done" : "pct-add"}>
+                        {item.done ? `${item.pct}%` : `+${item.pct}%`}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -517,47 +770,47 @@ export default function AthleteProfile() {
 
             <div className="section-head">
               <h3>Performance Dashboard</h3>
-                <div className="filters-row">
-                  <Select defaultValue="current">
-                    <SelectTrigger className="dash-filter-trigger">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current">Current Performance</SelectItem>
-                      <SelectItem value="best">Best Performance</SelectItem>
-                      <SelectItem value="lowest">Lowest Performance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select defaultValue="match">
-                    <SelectTrigger className="dash-filter-trigger">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="match">Match</SelectItem>
-                      <SelectItem value="training">Training</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select defaultValue="7d">
-                    <SelectTrigger className="dash-filter-trigger">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7d">Last 7 days</SelectItem>
-                      <SelectItem value="30d">Last 30 days</SelectItem>
-                      <SelectItem value="3m">Last 3 months</SelectItem>
-                      <SelectItem value="1y">Last year</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="filters-row">
+                <Select defaultValue="current">
+                  <SelectTrigger className="dash-filter-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current">Current Performance</SelectItem>
+                    <SelectItem value="best">Best Performance</SelectItem>
+                    <SelectItem value="lowest">Lowest Performance</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select defaultValue="match">
+                  <SelectTrigger className="dash-filter-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="match">Match</SelectItem>
+                    <SelectItem value="training">Training</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select defaultValue="7d">
+                  <SelectTrigger className="dash-filter-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7d">Last 7 days</SelectItem>
+                    <SelectItem value="30d">Last 30 days</SelectItem>
+                    <SelectItem value="3m">Last 3 months</SelectItem>
+                    <SelectItem value="1y">Last year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Performance Stats */}
             <div className="perf-stats-grid">
               {[
-                { label: "Peak Speed",      value: "31 km/h",  sub: "Top 12% in position",  tooltip: "Highest recorded sprint speed in the selected period" },
-                { label: "Distance",        value: "5 km",     sub: "Avg last 5 sessions",   tooltip: "Average distance covered per selected session" },
-                { label: "Agility",         value: "92%",      sub: "Improving trend",       tooltip: "Agility score based on movement and direction change" },
-                { label: "Feedback Score",  value: "8.6 / 10", sub: "This week",             tooltip: "Average coach feedback score in the selected range" },
+                { label: "Peak Speed", value: performanceSummary.peakSpeed, sub: "Top 12% in position", tooltip: "Highest recorded sprint speed in the selected period" },
+                { label: "Distance", value: performanceSummary.distance, sub: "Avg last 5 sessions", tooltip: "Average distance covered per selected session" },
+                { label: "Agility", value: performanceSummary.agility, sub: "Improving trend", tooltip: "Agility score based on movement and direction change" },
+                { label: "Feedback Score", value: performanceSummary.feedbackScore, sub: "This week", tooltip: "Average coach feedback score in the selected range" },
               ].map((s) => (
                 <div className="perf-stat" key={s.label}>
                   <div className="info-icon has-tooltip">i
@@ -584,30 +837,45 @@ export default function AthleteProfile() {
                     </linearGradient>
                   </defs>
                   {/* Grid Lines */}
-                  <line x1="45" y1="30"  x2="45"  y2="190" stroke="#e5e7eb" strokeWidth="1" />
+                  <line x1="45" y1="30" x2="45" y2="190" stroke="#e5e7eb" strokeWidth="1" />
                   <line x1="45" y1="190" x2="390" y2="190" stroke="#e5e7eb" strokeWidth="1" />
                   <line x1="45" y1="150" x2="390" y2="150" stroke="#e5e7eb" strokeDasharray="4,4" strokeWidth="1" />
                   <line x1="45" y1="110" x2="390" y2="110" stroke="#e5e7eb" strokeDasharray="4,4" strokeWidth="1" />
-                  <line x1="45" y1="70"  x2="390" y2="70"  stroke="#e5e7eb" strokeDasharray="4,4" strokeWidth="1" />
+                  <line x1="45" y1="70" x2="390" y2="70" stroke="#e5e7eb" strokeDasharray="4,4" strokeWidth="1" />
                   {/* Y Labels */}
                   <text x="35" y="194" fontSize="10" textAnchor="end" fill="#9ca3af">0</text>
                   <text x="35" y="154" fontSize="10" textAnchor="end" fill="#9ca3af">25</text>
                   <text x="35" y="114" fontSize="10" textAnchor="end" fill="#9ca3af">50</text>
-                  <text x="35" y="74"  fontSize="10" textAnchor="end" fill="#9ca3af">75</text>
-                  <text x="35" y="34"  fontSize="10" textAnchor="end" fill="#9ca3af">100</text>
+                  <text x="35" y="74" fontSize="10" textAnchor="end" fill="#9ca3af">75</text>
+                  <text x="35" y="34" fontSize="10" textAnchor="end" fill="#9ca3af">100</text>
                   {/* Previous Period Line */}
                   <path d="M45,142 L102,129 L159,144 L216,124 L273,127 L330,116 L387,121" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeDasharray="6,4" strokeLinejoin="round" />
                   {/* Current Period Area */}
                   <path d="M45,150 L102,123 L159,134 L216,102 L273,114 L330,70 L387,92 L387,190 L45,190 Z" fill="url(#currentFill)" />
                   {/* Current Period Line */}
-                  <path d="M45,150 L102,123 L159,134 L216,102 L273,114 L330,70 L387,92" fill="none" stroke="#0f766e" strokeWidth="3" strokeLinejoin="round" />
+                  <path
+                    d={generatePath()}
+                    fill="none"
+                    stroke="#0f766e"
+                    strokeWidth="3"
+                    strokeLinejoin="round"
+                  />
                   {/* Data Points */}
-                  {[[45,150],[102,123],[159,134],[216,102],[273,114],[330,70],[387,92]].map(([cx, cy], i) => (
+                  {[[45, 150], [102, 123], [159, 134], [216, 102], [273, 114], [330, 70], [387, 92]].map(([cx, cy], i) => (
                     <circle key={i} cx={cx} cy={cy} r="4" fill="#0f766e" />
                   ))}
                   {/* X Labels */}
-                  {["Jan","Feb","Mar","Apr","May","Jun","Jul"].map((m, i) => (
-                    <text key={m} x={45 + i * 57} y="210" fontSize="10" textAnchor="middle" fill="#9ca3af">{m}</text>
+                  {monthlyPerformance.map((item, i) => (
+                    <text
+                      key={item.month}
+                      x={45 + i * 57}
+                      y="210"
+                      fontSize="10"
+                      textAnchor="middle"
+                      fill="#9ca3af"
+                    >
+                      {item.month}
+                    </text>
                   ))}
                 </svg>
                 <div className="chart-legend">
@@ -627,35 +895,35 @@ export default function AthleteProfile() {
                 <div className="chart-label">Performance Radar</div>
                 <svg viewBox="0 0 320 262" width="100%">
                   {/* Grid Polygons */}
-                  <polygon points="160,35 255,125 160,215 65,125"   fill="none" stroke="#e5e7eb" />
-                  <polygon points="160,60 230,125 160,190 90,125"   fill="none" stroke="#e5e7eb" />
-                  <polygon points="160,85 205,125 160,165 115,125"  fill="none" stroke="#e5e7eb" />
+                  <polygon points="160,35 255,125 160,215 65,125" fill="none" stroke="#e5e7eb" />
+                  <polygon points="160,60 230,125 160,190 90,125" fill="none" stroke="#e5e7eb" />
+                  <polygon points="160,85 205,125 160,165 115,125" fill="none" stroke="#e5e7eb" />
                   <polygon points="160,103 184,125 160,147 136,125" fill="none" stroke="#e5e7eb" />
                   {/* Axes */}
-                  <line x1="160" y1="35"  x2="160" y2="215" stroke="#e5e7eb" />
-                  <line x1="65"  y1="125" x2="255" y2="125" stroke="#e5e7eb" />
+                  <line x1="160" y1="35" x2="160" y2="215" stroke="#e5e7eb" />
+                  <line x1="65" y1="125" x2="255" y2="125" stroke="#e5e7eb" />
                   {/* Data Shape */}
                   <polygon points="160,57 224,125 160,170 98,125" fill="rgba(15,118,110,0.18)" stroke="#0f766e" strokeWidth="2.5" />
                   {/* Data Points */}
-                  <circle cx="160" cy="57"  r="4" fill="#0f766e" />
+                  <circle cx="160" cy="57" r="4" fill="#0f766e" />
                   <circle cx="224" cy="125" r="4" fill="#0f766e" />
                   <circle cx="160" cy="170" r="4" fill="#0f766e" />
-                  <circle cx="98"  cy="125" r="4" fill="#0f766e" />
+                  <circle cx="98" cy="125" r="4" fill="#0f766e" />
                   {/* Axis Labels */}
-                  <text x="160" y="18"  textAnchor="middle" fontSize="11" fill="#6b7280">Speed</text>
+                  <text x="160" y="18" textAnchor="middle" fontSize="11" fill="#6b7280">Speed</text>
                   <text x="264" y="129" fontSize="11" fill="#6b7280">Agility</text>
                   <text x="160" y="236" textAnchor="middle" fontSize="11" fill="#6b7280">Feedback Score</text>
-                  <text x="13"  y="129" fontSize="11" fill="#6b7280">Distance</text>
+                  <text x="13" y="129" fontSize="11" fill="#6b7280">Distance</text>
                   {/* Scale Labels */}
                   <text x="167" y="106" fontSize="9" fill="#9ca3af">25</text>
-                  <text x="167" y="87"  fontSize="9" fill="#9ca3af">50</text>
-                  <text x="167" y="63"  fontSize="9" fill="#9ca3af">75</text>
-                  <text x="167" y="39"  fontSize="9" fill="#9ca3af">100</text>
+                  <text x="167" y="87" fontSize="9" fill="#9ca3af">50</text>
+                  <text x="167" y="63" fontSize="9" fill="#9ca3af">75</text>
+                  <text x="167" y="39" fontSize="9" fill="#9ca3af">100</text>
                   {/* Metric Values */}
-                  <text x="160" y="49"  textAnchor="middle" fontSize="10" fill="#0f766e" fontWeight="700">88</text>
+                  <text x="160" y="49" textAnchor="middle" fontSize="10" fill="#0f766e" fontWeight="700">88</text>
                   <text x="234" y="121" fontSize="10" fill="#0f766e" fontWeight="700">92</text>
                   <text x="160" y="184" textAnchor="middle" fontSize="10" fill="#0f766e" fontWeight="700">65</text>
-                  <text x="74"  y="121" fontSize="10" fill="#0f766e" fontWeight="700">86</text>
+                  <text x="74" y="121" fontSize="10" fill="#0f766e" fontWeight="700">86</text>
                 </svg>
                 <div className="chart-legend">
                   <div className="legend-item">
@@ -673,7 +941,7 @@ export default function AthleteProfile() {
 
             <div className="section-head">
               <h3>Top Videos</h3>
-              <Link to={`/athlete-videos${viewerQuery}`}>
+              <Link to={`/athlete-videos`}>
                 <button className="btn btn-outline">View all videos</button>
               </Link>
             </div>
@@ -771,11 +1039,11 @@ export default function AthleteProfile() {
         </div>
       )}
 
-      {/* ── Send Feedback Modal (coach viewer) ── */}
+      {/* ── Send Feedback Modal (coach viewer) */}
       {showFeedbackModal && (
         <SendFeedbackModal
-          playerId="athlete-001"
-          playerName="Mohammed Al-Harbi"
+          playerId={profile?.id ?? ""}
+          playerName={profile?.fullName ?? "-"}
           onClose={() => setShowFeedbackModal(false)}
           onSubmit={(payload) => {
             console.log("Feedback submitted:", payload);
@@ -786,4 +1054,5 @@ export default function AthleteProfile() {
 
     </div>
   );
+
 }

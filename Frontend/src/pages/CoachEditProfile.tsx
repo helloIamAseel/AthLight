@@ -387,14 +387,12 @@ export default function CoachEditProfile() {
               <Input value={formData.experienceYears} onChange={(e) => handleChange("experienceYears", e.target.value)} placeholder="e.g. 10" />
             </Field>
             <Field label="License Status" required error={errors.licenseStatus}>
-              <Select value={formData.licenseStatus} onValueChange={(v) => handleChange("licenseStatus", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Verified">Verified</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                value={formData.licenseStatus}
+                disabled
+                readOnly
+                className="bg-muted text-muted-foreground cursor-not-allowed"
+              />
             </Field>
             <Field label="Specialty Tag 1" required error={errors.specialtyOne}>
               <Input value={formData.specialtyOne} onChange={(e) => handleChange("specialtyOne", e.target.value)} placeholder="e.g. Tactical Coach" />
