@@ -9,7 +9,15 @@ const PORT = process.env.PORT || 3000;
 const { errorHandler } = require('./middleware/errorHandler');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173',  // Local development
+    'https://athlight26.vercel.app',  // Production frontend URL
+    /\.vercel\.app$/  // Any Vercel preview deployment
+  ],
+  credentials: true
+}));
+
 app.use(express.json({ limit: "10mb" }));//edit by Sumayah
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));//edit by Sumayah
 
